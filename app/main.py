@@ -67,6 +67,29 @@ app = FastAPI(title="WhatsApp Personal AI Agent", lifespan=lifespan)
 async def health():
     return {"status": "ok", "service": "whatsapp-personal-agent"}
 
+@app.post("/sync-wispr")
+async def sync_wispr(request: Request):
+    """Secure endpoint to sync local Wispr Flow meetings and notes to cloud database."""
+    body = await request.json()
+    token = body.get("sync_token")
+    expected_token = os.getenv("SYNC_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
+    if token != expected_token:
+        return Response(status_code=403, content="Unauthorized sync token")
+        
+    meetings = body.get("meetings", [])
+    notes = body.get("notes", [])
+    
+    if meetings:
+        db.save_synced_meetings(meetings)
+    if notes:
+        db.save_synced_notes(notes)
+        
+    return {
+        "status": "ok",
+        "synced_meetings": len(meetings),
+        "synced_notes": len(notes)
+    }
+
 @app.get("/webhook")
 async def verify_webhook(request: Request):
     """Handshake endpoint for Meta WhatsApp Cloud API verification."""

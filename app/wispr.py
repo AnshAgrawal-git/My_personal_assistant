@@ -8,6 +8,7 @@ Zero external cloud lag, zero API rate limits, 100% real-time.
 import os
 import sqlite3
 from typing import Any
+from app import database as db
 
 def get_flow_db_path() -> str:
     return os.path.expandvars(r"%APPDATA%\Wispr Flow\flow.sqlite")
@@ -16,7 +17,8 @@ def get_recent_meetings(limit: int = 5) -> list[dict[str, Any]]:
     """Retrieve the most recent meetings recorded by Wispr Flow."""
     db_path = get_flow_db_path()
     if not os.path.exists(db_path):
-        return []
+        # Fallback to cloud database if running on Render/cloud
+        return db.get_cloud_wispr_meetings(limit=limit)
 
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
@@ -50,7 +52,8 @@ def get_meeting_details(meeting_query: str) -> dict[str, Any] | None:
     """Find a meeting by title keyword or ID and return full notes & todos."""
     db_path = get_flow_db_path()
     if not os.path.exists(db_path):
-        return None
+        # Fallback to cloud database if running on Render/cloud
+        return db.get_cloud_meeting_details(meeting_query)
 
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
@@ -83,7 +86,8 @@ def get_recent_notes(limit: int = 5) -> list[dict[str, Any]]:
     """Retrieve scratchpad notes from Wispr Flow."""
     db_path = get_flow_db_path()
     if not os.path.exists(db_path):
-        return []
+        # Fallback to cloud database if running on Render/cloud
+        return db.get_cloud_wispr_notes(limit=limit)
 
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row

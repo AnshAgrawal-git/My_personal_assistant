@@ -164,7 +164,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.info("Successfully sent reply to Telegram!")
     except Exception as e:
         logging.error(f"Error processing message: {e}", exc_info=True)
-        await update.message.reply_text("Sorry, I hit a snag. Please try again in a second!")
+        err_msg = str(e)
+        if len(err_msg) > 150:
+            err_msg = err_msg[:150] + "..."
+        await update.message.reply_text(f"⚠️ Hit an issue: {err_msg}")
 
 def create_telegram_application():
     if not BOT_TOKEN:

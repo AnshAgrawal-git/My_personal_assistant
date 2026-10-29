@@ -1,4 +1,5 @@
 import os
+import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -47,6 +48,23 @@ def init_db():
             scheduled_for TEXT NOT NULL,
             sent_at TEXT DEFAULT NULL,
             FOREIGN KEY (task_id) REFERENCES tasks(id)
+        );
+        
+        CREATE TABLE IF NOT EXISTS wispr_meetings (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            summary TEXT DEFAULT '',
+            notes TEXT DEFAULT '',
+            participant_names TEXT DEFAULT '',
+            todos_json TEXT DEFAULT '[]',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE TABLE IF NOT EXISTS wispr_notes (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            content TEXT DEFAULT '',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
     """)
     conn.commit()
@@ -179,5 +197,59 @@ def mark_followup_sent(followup_id: int):
     )
     conn.commit()
     conn.close()
+
+# ─── Wispr Cloud Sync Operations ───
+
+def save_synced_meetings(meetings: list[dict]):
+    conn = get_db()
+    for m in meetings:
+        todos_str = json.dumps(m.get("todos", []))
+        conn.execute("""
+            INSERT OR REPLACE INTO wispr_meetings (id, title, summary, notes, participant_names, todos_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (m["id"], m.get("title", ""), m.get("summary", ""), m.get("notes", ""), m.get("participantNames", ""), todos_str, m.get("createdAt", "")))
+    conn.commit()
+    conn.close()
+
+def save_synced_notes(notes: list[dict]):
+    conn = get_db()
+    for n in notes:
+        conn.execute("""
+            INSERT OR REPLACE INTO wispr_notes (id, title, content, created_at)
+            VALUES (?, ?, ?, ?)
+        """, (n["id"], n.get("title", ""), n.get("content", ""), n.get("createdAt", "")))
+    conn.commit()
+    conn.close()
+
+def get_cloud_wispr_meetings(limit: int = 5) -> list[dict]:
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM wispr_meetings ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["todos"] = json.loads(d.get("todos_json") or "[]")
+        result.append(d)
+    return result
+
+def get_cloud_meeting_details(query: str) -> dict | None:
+    conn = get_db()
+    row = conn.execute("""
+        SELECT * FROM wispr_meetings 
+        WHERE id = ? OR LOWER(title) LIKE LOWER(?) OR LOWER(summary) LIKE LOWER(?) OR LOWER(notes) LIKE LOWER(?)
+        ORDER BY created_at DESC LIMIT 1
+    """, (query, f"%{query}%", f"%{query}%", f"%{query}%")).fetchone()
+    conn.close()
+    if not row:
+        return None
+    d = dict(row)
+    d["todos"] = json.loads(d.get("todos_json") or "[]")
+    return d
+
+def get_cloud_wispr_notes(limit: int = 5) -> list[dict]:
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM wispr_notes ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 init_db()
