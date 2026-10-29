@@ -26,7 +26,7 @@ logging.basicConfig(
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_USER_ID = os.getenv("TELEGRAM_USER_ID", "940247023")
-MY_NAME = os.getenv("MY_NAME", "Boss")
+MY_NAME = os.getenv("MY_NAME", "Ansh")
 TZ = ZoneInfo("Asia/Kolkata")
 
 def build_morning_briefing_text() -> str:
@@ -66,20 +66,33 @@ def build_morning_briefing_text() -> str:
         for o in summary["overdue"][:3]:
             lines.append(f"• #{o['id']} {o['title']} (due: {o['due_date']})")
             
-    lines.append("\n💪 Ready to roll! Reply anytime to log tasks, schedule calls, or delegate.")
+    lines.append("\n💪 Ready to conquer the day! Reply anytime to log tasks, schedule calls, or delegate.")
     return "\n".join(lines)
 
 def build_evening_wrapup_text() -> str:
     summary = db.get_all_tasks_summary()
+    pending_tasks = db.list_tasks(status="pending")
+    
     lines = [
-        f"🌙 *Good evening, {MY_NAME}!* Here is your end-of-day wrap-up:\n",
+        f"🌙 *Good evening, {MY_NAME}!* Time for your end-of-day check-in:\n",
         f"✅ *Completed today:* {summary['done_today']} tasks",
         f"📋 *Still pending:* {summary['pending']} tasks",
     ]
     if summary["overdue"]:
-        lines.append(f"⚠️ *Overdue:* {len(summary['overdue'])} tasks")
+        lines.append(f"⚠️ *Overdue items:* {len(summary['overdue'])} tasks")
         
-    lines.append("\nGreat job today! Anything you'd like to check off or queue up for tomorrow?")
+    if pending_tasks:
+        lines.append("\n*Pending tasks on your plate:*")
+        for t in pending_tasks[:6]:
+            p_emoji = {"urgent": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}.get(t["priority"], "⚪")
+            assign_str = f" (assigned to {t['assigned_to']})" if t.get('assigned_to') else ""
+            lines.append(f"{p_emoji} #{t['id']} {t['title']}{assign_str}")
+        if len(pending_tasks) > 6:
+            lines.append(f"_...and {len(pending_tasks) - 6} more._")
+            
+    lines.append("\n🎯 *What have you completed today?*")
+    lines.append("Just reply with what you finished or the task numbers (e.g., _'I finished #1 and #3'_ or _'Done with meeting review'_), and I will mark them off for you!")
+    lines.append("Or tell me what's priority for tomorrow and I'll queue it up! 🚀")
     return "\n".join(lines)
 
 async def morning_briefing_job(context: ContextTypes.DEFAULT_TYPE):
@@ -204,8 +217,10 @@ def create_telegram_application():
     # Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("morning", morning_command))
-    app.add_handler(CommandHandler("evening", evening_command))
     app.add_handler(CommandHandler("briefing", morning_command))
+    app.add_handler(CommandHandler("evening", evening_command))
+    app.add_handler(CommandHandler("wrapup", evening_command))
+    app.add_handler(CommandHandler("night", evening_command))
     app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text))
     
@@ -214,8 +229,8 @@ def create_telegram_application():
     if job_queue:
         # 8:30 AM IST Daily Morning Briefing
         job_queue.run_daily(morning_briefing_job, time=datetime.time(8, 30, tzinfo=TZ))
-        # 8:00 PM IST Daily Evening Wrap-up
-        job_queue.run_daily(evening_wrapup_job, time=datetime.time(20, 0, tzinfo=TZ))
+        # 9:00 PM IST Daily Night Wrap-up
+        job_queue.run_daily(evening_wrapup_job, time=datetime.time(21, 0, tzinfo=TZ))
         # Every 10 minutes: check teammate followups
         job_queue.run_repeating(followup_checker_job, interval=600, first=15)
         
