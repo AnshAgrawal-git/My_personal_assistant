@@ -29,13 +29,13 @@ SYSTEM_PROMPT = f"""You are {MY_NAME}'s personal productivity buddy on Telegram 
 - Always use the provided tools to read or update data.
 """
 
-def get_agent():
+def get_agent(model_name: str = "gemini-3.5-flash-lite"):
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         raise ValueError("GOOGLE_API_KEY is missing from environment or .env file.")
 
     model = ChatGoogleGenerativeAI(
-        model="gemini-3.5-flash",
+        model=model_name,
         temperature=0.2,
         google_api_key=api_key,
     )
@@ -60,10 +60,22 @@ async def process_message(phone: str, text: str) -> str:
     augmented_text = f"[Context: Current local time is {now_context}]\nUser message: {text}"
 
     config = {"configurable": {"thread_id": phone}}
-    result = await agent.ainvoke(
-        {"messages": [{"role": "user", "content": augmented_text}]},
-        config,
-    )
+    try:
+        result = await agent.ainvoke(
+            {"messages": [{"role": "user", "content": augmented_text}]},
+            config,
+        )
+    except Exception as e:
+        # If rate limited (429), auto-fallback to flash-lite or alternate
+        if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+            print(f"[Agent] Rate limit hit. Falling back to gemini-3.5-flash-lite...")
+            agent = get_agent("gemini-3.5-flash-lite")
+            result = await agent.ainvoke(
+                {"messages": [{"role": "user", "content": augmented_text}]},
+                config,
+            )
+        else:
+            raise e
 
     raw_content = result["messages"][-1].content
     if isinstance(raw_content, list):
