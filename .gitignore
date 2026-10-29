@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+.env
+agent.db
+token.json
+credentials.json
+auth_url.txt
+*.log
+.DS_Store
