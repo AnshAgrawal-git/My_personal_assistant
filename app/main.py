@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 from app.agent import process_message
 from app.whatsapp import send_message
+from app import database as db
 from app.database import init_db, get_due_followups, mark_followup_sent
 
 load_dotenv()

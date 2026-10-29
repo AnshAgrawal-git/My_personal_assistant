@@ -11,10 +11,10 @@ DB_PATH = os.path.expandvars(r"%APPDATA%\Wispr Flow\flow.sqlite")
 
 def sync():
     if not os.path.exists(DB_PATH):
-        print(f"❌ Wispr Flow database not found at: {DB_PATH}")
+        print(f"[Wispr Sync] Error: Wispr Flow database not found at: {DB_PATH}")
         return
 
-    print("📖 Reading local Wispr Flow meetings and notes...")
+    print("[Wispr Sync] Reading local Wispr Flow meetings and notes...")
     conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -47,7 +47,7 @@ def sync():
     notes = [dict(r) for r in cursor.fetchall()]
     conn.close()
 
-    print(f"🚀 Uploading {len(meetings)} meetings and {len(notes)} notes to Cloud Bot...")
+    print(f"[Wispr Sync] Uploading {len(meetings)} meetings and {len(notes)} notes to Cloud Bot...")
     payload = {
         "sync_token": BOT_TOKEN,
         "meetings": meetings,
@@ -58,11 +58,11 @@ def sync():
         response = httpx.post(f"{RENDER_URL}/sync-wispr", json=payload, timeout=30.0)
         if response.status_code == 200:
             data = response.json()
-            print(f"🎉 SYNC COMPLETE! Synced {data.get('synced_meetings')} meetings and {data.get('synced_notes')} notes to Render Cloud!")
+            print(f"[Wispr Sync] SUCCESS! Synced {data.get('synced_meetings')} meetings and {data.get('synced_notes')} notes to Render Cloud!")
         else:
-            print(f"⚠️ Sync returned status {response.status_code}: {response.text}")
+            print(f"[Wispr Sync] Server returned status {response.status_code}: {response.text}")
     except Exception as e:
-        print(f"❌ Failed to reach cloud bot: {e}")
+        print(f"[Wispr Sync] Failed to reach cloud bot: {e}")
 
 if __name__ == "__main__":
     sync()
