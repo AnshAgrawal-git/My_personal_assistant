@@ -176,6 +176,25 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             err_msg = err_msg[:150] + "..."
         await update.message.reply_text(f"⚠️ Hit an issue: {err_msg}")
 
+async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Saves shared Telegram contact cards directly to database."""
+    contact = update.message.contact
+    if not contact:
+        return
+        
+    name = f"{contact.first_name or ''} {contact.last_name or ''}".strip()
+    phone = contact.phone_number.lstrip("+")
+    
+    success = db.add_teammate(name=name, phone=phone)
+    if success:
+        await update.message.reply_text(
+            f"👤 *Contact Saved!*\n• Name: {name}\n• Phone: +{phone}\n\n"
+            f"Next time you say _'Draft a message to {name.split()[0]}'_, I will generate their direct one-click WhatsApp link!",
+            parse_mode="Markdown"
+        )
+    else:
+        await update.message.reply_text(f"⚠️ Could not save contact for {name}.")
+
 def create_telegram_application():
     if not BOT_TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN missing in .env")
@@ -187,6 +206,7 @@ def create_telegram_application():
     app.add_handler(CommandHandler("morning", morning_command))
     app.add_handler(CommandHandler("evening", evening_command))
     app.add_handler(CommandHandler("briefing", morning_command))
+    app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text))
     
     # Scheduled Jobs
