@@ -1,3 +1,5 @@
+import re
+import urllib.parse
 from datetime import datetime
 from langchain_core.tools import tool
 from app import database as db
@@ -313,6 +315,48 @@ def schedule_meeting(
     except Exception as e:
         return f"❌ Failed to schedule Google Meet: {str(e)}"
 
+# ─── WhatsApp Quick-Send Tools ───
+
+@tool
+def create_whatsapp_chat_link(recipient: str, message: str) -> str:
+    """Generate a one-click WhatsApp Click-to-Chat link that opens the recipient's direct chat with the pre-filled message.
+    
+    Args:
+        recipient: Name of teammate/client (e.g. 'Pralad', 'Shanzel', 'Shobana') or phone number with country code.
+        message: The drafted text message ready to send.
+    """
+    phone = ""
+    # Look up in contacts
+    contact = db.get_teammate_by_name(recipient)
+    if contact and contact.get("phone"):
+        phone = contact["phone"]
+    else:
+        # Check if recipient contains numbers directly
+        clean = re.sub(r"[^\d]", "", recipient)
+        if len(clean) >= 10:
+            phone = clean
+            
+    encoded_text = urllib.parse.quote(message)
+    
+    if phone:
+        clean_phone = re.sub(r"[^\d]", "", phone).lstrip("0")
+        if len(clean_phone) == 10:
+            clean_phone = "91" + clean_phone
+        wa_url = f"https://wa.me/{clean_phone}?text={encoded_text}"
+        return (
+            f"💬 *Drafted WhatsApp Message for {recipient}:*\n"
+            f"_{message}_\n\n"
+            f"📲 [👉 Click to Open WhatsApp & Send to {recipient}]({wa_url})"
+        )
+    else:
+        wa_url = f"https://api.whatsapp.com/send?text={encoded_text}"
+        return (
+            f"💬 *Drafted WhatsApp Message for {recipient}:*\n"
+            f"_{message}_\n\n"
+            f"📲 [👉 Click to Open WhatsApp & Send]({wa_url})\n\n"
+            f"💡 *Tip:* Reply with: *'{recipient}\\'s phone is +91...'* so next time it opens their specific chat directly!"
+        )
+
 ALL_TOOLS = [
     add_task,
     show_tasks,
@@ -327,4 +371,5 @@ ALL_TOOLS = [
     save_contact,
     list_contacts,
     schedule_meeting,
+    create_whatsapp_chat_link,
 ]

@@ -3,7 +3,7 @@ import logging
 import datetime
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import Update, LinkPreviewOptions
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -155,11 +155,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await process_message(user_id, text)
         logging.info(f"Agent generated reply (len {len(reply)}): {reply[:100]}...")
         
+        preview_opts = LinkPreviewOptions(is_disabled=True)
         if len(reply) > 4000:
             for chunk in [reply[i:i+4000] for i in range(0, len(reply), 4000)]:
-                await update.message.reply_text(chunk)
+                try:
+                    await update.message.reply_text(chunk, parse_mode="Markdown", link_preview_options=preview_opts)
+                except Exception:
+                    await update.message.reply_text(chunk, link_preview_options=preview_opts)
         else:
-            await update.message.reply_text(reply)
+            try:
+                await update.message.reply_text(reply, parse_mode="Markdown", link_preview_options=preview_opts)
+            except Exception:
+                await update.message.reply_text(reply, link_preview_options=preview_opts)
             
         logging.info("Successfully sent reply to Telegram!")
     except Exception as e:
