@@ -70,7 +70,7 @@ async def health():
 
 @app.post("/sync-wispr")
 async def sync_wispr(request: Request):
-    """Secure endpoint to sync local Wispr Flow meetings and notes to cloud database."""
+    """Secure endpoint to sync local Wispr Flow meetings, notes, tasks, and teammates to cloud database."""
     body = await request.json()
     token = body.get("sync_token")
     expected_token = os.getenv("SYNC_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
@@ -79,16 +79,28 @@ async def sync_wispr(request: Request):
         
     meetings = body.get("meetings", [])
     notes = body.get("notes", [])
+    tasks = body.get("tasks", [])
+    teammates = body.get("teammates", [])
     
     if meetings:
         db.save_synced_meetings(meetings)
     if notes:
         db.save_synced_notes(notes)
+    if tasks:
+        db.save_synced_tasks(tasks)
+    if teammates:
+        db.save_synced_teammates(teammates)
         
+    cloud_tasks = db.get_all_tasks()
+    cloud_teammates = db.get_all_teammates()
+    
     return {
         "status": "ok",
         "synced_meetings": len(meetings),
-        "synced_notes": len(notes)
+        "synced_notes": len(notes),
+        "synced_tasks": len(tasks),
+        "cloud_tasks": cloud_tasks,
+        "cloud_teammates": cloud_teammates,
     }
 
 @app.get("/webhook")

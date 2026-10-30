@@ -252,4 +252,48 @@ def get_cloud_wispr_notes(limit: int = 5) -> list[dict]:
     conn.close()
     return [dict(r) for r in rows]
 
+def save_synced_tasks(tasks: list[dict]):
+    conn = get_db()
+    for t in tasks:
+        existing = conn.execute("SELECT id FROM tasks WHERE LOWER(title) = LOWER(?)", (t.get("title", "").strip(),)).fetchone()
+        if not existing:
+            conn.execute("""
+                INSERT INTO tasks (title, description, status, priority, assigned_to, due_date, source, created_at, completed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                t.get("title", "").strip(),
+                t.get("description", ""),
+                t.get("status", "pending"),
+                t.get("priority", "medium"),
+                t.get("assigned_to"),
+                t.get("due_date"),
+                t.get("source", "manual"),
+                t.get("created_at"),
+                t.get("completed_at")
+            ))
+    conn.commit()
+    conn.close()
+
+def save_synced_teammates(teammates: list[dict]):
+    conn = get_db()
+    for tm in teammates:
+        conn.execute("""
+            INSERT OR IGNORE INTO teammates (name, phone, email)
+            VALUES (?, ?, ?)
+        """, (tm.get("name", "").strip(), tm.get("phone", "").strip(), tm.get("email", "").strip()))
+    conn.commit()
+    conn.close()
+
+def get_all_tasks() -> list[dict]:
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM tasks ORDER BY id ASC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_all_teammates() -> list[dict]:
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM teammates ORDER BY id ASC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
 init_db()
