@@ -53,7 +53,9 @@ def build_morning_briefing_text() -> str:
         for t in tasks[:5]:
             p_emoji = {"urgent": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}.get(t["priority"], "⚪")
             assign_str = f" → {t['assigned_to']}" if t.get('assigned_to') else ""
-            lines.append(f"{p_emoji} #{t['id']} {t['title']}{assign_str}")
+            prog = t.get("progress") or 0
+            prog_str = f" `[{prog}%]`" if prog > 0 else ""
+            lines.append(f"{p_emoji} #{t['id']} {t['title']}{prog_str}{assign_str}")
         if len(tasks) > 5:
             lines.append(f"_...and {len(tasks) - 5} more._")
     else:
@@ -86,7 +88,9 @@ def build_evening_wrapup_text() -> str:
         for t in pending_tasks[:6]:
             p_emoji = {"urgent": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}.get(t["priority"], "⚪")
             assign_str = f" (assigned to {t['assigned_to']})" if t.get('assigned_to') else ""
-            lines.append(f"{p_emoji} #{t['id']} {t['title']}{assign_str}")
+            prog = t.get("progress") or 0
+            prog_str = f" `[{prog}%]`" if prog > 0 else ""
+            lines.append(f"{p_emoji} #{t['id']} {t['title']}{prog_str}{assign_str}")
         if len(pending_tasks) > 6:
             lines.append(f"_...and {len(pending_tasks) - 6} more._")
             

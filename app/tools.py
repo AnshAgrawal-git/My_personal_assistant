@@ -8,6 +8,12 @@ from app import google_meet
 
 # ─── Task Management Tools ───
 
+def make_progress_bar(percentage: int) -> str:
+    percentage = max(0, min(100, int(percentage or 0)))
+    filled = percentage // 10
+    empty = 10 - filled
+    return f"[{'█' * filled}{'░' * empty}] {percentage}%"
+
 @tool
 def add_task(title: str, due_date: str = None, priority: str = "medium") -> str:
     """Add a new task to your task list.
@@ -37,12 +43,77 @@ def show_tasks(status: str = "pending") -> str:
     lines = [f"📋 Your {status} tasks:"]
     for t in tasks:
         emoji = {"urgent": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}.get(t["priority"], "⚪")
-        line = f"{emoji} #{t['id']} — {t['title']}"
+        prog = t.get("progress") or 0
+        prog_str = f" [{prog}%]" if prog > 0 else ""
+        line = f"{emoji} #{t['id']} — {t['title']}{prog_str}"
         if t["due_date"]:
             line += f" (due {t['due_date']})"
         if t["assigned_to"]:
             line += f" → assigned to {t['assigned_to']}"
         lines.append(line)
+    return "\n".join(lines)
+
+@tool
+def update_task(task_id: int, note: str = None, progress: int = None, status: str = None) -> str:
+    """Add a work update/note to a task, update its completion progress percentage (0-100%), or change its status.
+    
+    Args:
+        task_id: The integer ID number of the task (e.g. 2).
+        note: A description of progress, notes, or details about the work done on this task.
+        progress: Progress percentage from 0 to 100. If 100, task is automatically marked completed.
+        status: Optional status override — 'pending', 'in_progress', or 'completed'.
+    """
+    success = db.add_task_update(task_id=task_id, note=note, progress=progress, status=status)
+    if not success:
+        return f"❌ Task #{task_id} not found."
+        
+    details = db.get_task_details(task_id)
+    prog_val = details.get("progress") or 0
+    prog_bar = make_progress_bar(prog_val)
+    
+    res = [f"📝 *Task #{task_id} Updated:* {details['title']}"]
+    res.append(f"📊 Progress: {prog_bar} ({details['status'].upper()})")
+    if note:
+        res.append(f"💬 Added note: \"{note}\"")
+    return "\n".join(res)
+
+@tool
+def get_task_details(task_id: int) -> str:
+    """Retrieve full details, notes, work logs, and completion progress for a specific task.
+    
+    Args:
+        task_id: The integer ID number of the task (e.g. 2).
+    """
+    task = db.get_task_details(task_id)
+    if not task:
+        return f"❌ Task #{task_id} not found."
+        
+    prog_val = task.get("progress") or 0
+    prog_bar = make_progress_bar(prog_val)
+    emoji = {"urgent": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}.get(task["priority"], "⚪")
+    
+    lines = [
+        f"{emoji} *Task #{task['id']}: {task['title']}*",
+        f"📊 *Progress:* {prog_bar}",
+        f"🚦 *Status:* {task['status'].title()} | *Priority:* {task['priority'].title()}",
+    ]
+    if task.get("due_date"):
+        lines.append(f"📅 *Due Date:* {task['due_date']}")
+    if task.get("assigned_to"):
+        lines.append(f"👤 *Assigned To:* {task['assigned_to']}")
+    if task.get("description"):
+        lines.append(f"📄 *Description:* {task['description']}")
+        
+    updates = task.get("updates", [])
+    if updates:
+        lines.append("\n📜 *Work Log & Notes:*")
+        for u in updates:
+            time_str = u.get("created_at", "")[:16]
+            prog_tag = f" ({u['progress']}%)" if u.get("progress") is not None else ""
+            lines.append(f"• `[{time_str}]`{prog_tag} {u['note']}")
+    else:
+        lines.append("\n_No notes logged yet. You can add notes or progress anytime!_")
+        
     return "\n".join(lines)
 
 @tool
@@ -360,6 +431,8 @@ def create_whatsapp_chat_link(recipient: str, message: str) -> str:
 ALL_TOOLS = [
     add_task,
     show_tasks,
+    update_task,
+    get_task_details,
     complete_task,
     daily_summary,
     add_teammate,

@@ -81,6 +81,7 @@ async def sync_wispr(request: Request):
     notes = body.get("notes", [])
     tasks = body.get("tasks", [])
     teammates = body.get("teammates", [])
+    task_updates = body.get("task_updates", [])
     
     if meetings:
         db.save_synced_meetings(meetings)
@@ -90,17 +91,22 @@ async def sync_wispr(request: Request):
         db.save_synced_tasks(tasks)
     if teammates:
         db.save_synced_teammates(teammates)
+    if task_updates:
+        db.save_synced_task_updates(task_updates)
         
     cloud_tasks = db.get_all_tasks()
     cloud_teammates = db.get_all_teammates()
+    cloud_task_updates = db.get_all_task_updates()
     
     return {
         "status": "ok",
         "synced_meetings": len(meetings),
         "synced_notes": len(notes),
         "synced_tasks": len(tasks),
+        "synced_updates": len(task_updates),
         "cloud_tasks": cloud_tasks,
         "cloud_teammates": cloud_teammates,
+        "cloud_task_updates": cloud_task_updates,
     }
 
 @app.get("/webhook")

@@ -66,10 +66,24 @@ def init_db():
             content TEXT DEFAULT '',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+        
+        CREATE TABLE IF NOT EXISTS task_updates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL,
+            note TEXT NOT NULL,
+            progress INTEGER DEFAULT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+        );
     """)
     conn.commit()
     try:
         conn.execute("ALTER TABLE teammates ADD COLUMN email TEXT DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE tasks ADD COLUMN progress INTEGER DEFAULT 0")
         conn.commit()
     except sqlite3.OperationalError:
         pass
@@ -103,13 +117,74 @@ def list_tasks(status: str = "pending", date_filter: str = None) -> list[dict]:
 def complete_task(task_id: int) -> bool:
     conn = get_db()
     cursor = conn.execute(
-        "UPDATE tasks SET status='completed', completed_at=? WHERE id=?",
+        "UPDATE tasks SET status='completed', progress=100, completed_at=? WHERE id=?",
         (datetime.now().isoformat(), task_id)
     )
     conn.commit()
     affected = cursor.rowcount
     conn.close()
     return affected > 0
+
+def add_task_update(task_id: int, note: str = None, progress: int = None, status: str = None) -> bool:
+    conn = get_db()
+    task = conn.execute("SELECT id, status, progress FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if not task:
+        conn.close()
+        return False
+        
+    if note:
+        conn.execute(
+            "INSERT INTO task_updates (task_id, note, progress) VALUES (?, ?, ?)",
+            (task_id, note.strip(), progress)
+        )
+        
+    updates = []
+    params = []
+    if progress is not None:
+        prog_val = max(0, min(100, int(progress)))
+        updates.append("progress = ?")
+        params.append(prog_val)
+        if prog_val >= 100 and task["status"] != "completed":
+            updates.append("status = 'completed'")
+            updates.append("completed_at = ?")
+            params.append(datetime.now().isoformat())
+        elif prog_val < 100 and task["status"] == "completed":
+            updates.append("status = 'pending'")
+            updates.append("completed_at = NULL")
+            
+    if status and status != task["status"]:
+        updates.append("status = ?")
+        params.append(status)
+        if status == "completed":
+            updates.append("completed_at = ?")
+            params.append(datetime.now().isoformat())
+            if progress is None or progress < 100:
+                updates.append("progress = 100")
+        elif status == "pending":
+            updates.append("completed_at = NULL")
+            
+    if updates:
+        params.append(task_id)
+        conn.execute(f"UPDATE tasks SET {', '.join(updates)} WHERE id = ?", params)
+        
+    conn.commit()
+    conn.close()
+    return True
+
+def get_task_details(task_id: int) -> dict | None:
+    conn = get_db()
+    task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if not task:
+        conn.close()
+        return None
+    task_dict = dict(task)
+    updates = conn.execute(
+        "SELECT id, note, progress, created_at FROM task_updates WHERE task_id = ? ORDER BY created_at ASC",
+        (task_id,)
+    ).fetchall()
+    task_dict["updates"] = [dict(u) for u in updates]
+    conn.close()
+    return task_dict
 
 def get_all_tasks_summary() -> dict:
     conn = get_db()
@@ -258,8 +333,8 @@ def save_synced_tasks(tasks: list[dict]):
         existing = conn.execute("SELECT id FROM tasks WHERE LOWER(title) = LOWER(?)", (t.get("title", "").strip(),)).fetchone()
         if not existing:
             conn.execute("""
-                INSERT INTO tasks (title, description, status, priority, assigned_to, due_date, source, created_at, completed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO tasks (title, description, status, priority, assigned_to, due_date, source, created_at, completed_at, progress)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 t.get("title", "").strip(),
                 t.get("description", ""),
@@ -269,10 +344,31 @@ def save_synced_tasks(tasks: list[dict]):
                 t.get("due_date"),
                 t.get("source", "manual"),
                 t.get("created_at"),
-                t.get("completed_at")
+                t.get("completed_at"),
+                t.get("progress", 0)
             ))
+        else:
+            conn.execute("""
+                UPDATE tasks SET status = ?, progress = ?, completed_at = ? WHERE id = ?
+            """, (t.get("status", "pending"), t.get("progress", 0), t.get("completed_at"), existing["id"]))
     conn.commit()
     conn.close()
+
+def save_synced_task_updates(updates: list[dict]):
+    conn = get_db()
+    for u in updates:
+        conn.execute("""
+            INSERT OR IGNORE INTO task_updates (id, task_id, note, progress, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (u.get("id"), u.get("task_id"), u.get("note"), u.get("progress"), u.get("created_at")))
+    conn.commit()
+    conn.close()
+
+def get_all_task_updates() -> list[dict]:
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM task_updates ORDER BY id ASC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 def save_synced_teammates(teammates: list[dict]):
     conn = get_db()

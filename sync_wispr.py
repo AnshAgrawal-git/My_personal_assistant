@@ -52,6 +52,7 @@ def sync():
             print(f"[Wispr Sync] Could not read Wispr Flow database: {e}")
 
     # 2. Read Local Tasks & Teammates from agent.db
+    task_updates = []
     if os.path.exists(LOCAL_AGENT_DB):
         try:
             conn = sqlite3.connect(LOCAL_AGENT_DB)
@@ -61,17 +62,23 @@ def sync():
             tasks = [dict(r) for r in c.fetchall()]
             c.execute("SELECT * FROM teammates;")
             teammates = [dict(r) for r in c.fetchall()]
+            try:
+                c.execute("SELECT * FROM task_updates;")
+                task_updates = [dict(r) for r in c.fetchall()]
+            except Exception:
+                pass
             conn.close()
         except Exception as e:
             print(f"[Wispr Sync] Could not read local agent.db: {e}")
 
-    print(f"[Wispr Sync] Uploading {len(meetings)} meetings, {len(notes)} notes, {len(tasks)} tasks to Cloud Bot...")
+    print(f"[Wispr Sync] Uploading {len(meetings)} meetings, {len(notes)} notes, {len(tasks)} tasks, {len(task_updates)} updates to Cloud Bot...")
     payload = {
         "sync_token": BOT_TOKEN,
         "meetings": meetings,
         "notes": notes,
         "tasks": tasks,
-        "teammates": teammates
+        "teammates": teammates,
+        "task_updates": task_updates
     }
 
     try:
@@ -80,9 +87,11 @@ def sync():
             data = response.json()
             print(f"[Wispr Sync] SUCCESS! Synced {data.get('synced_meetings')} meetings, {data.get('synced_notes')} notes, and {data.get('synced_tasks')} tasks to Render Cloud!")
             
-            # Sync back cloud teammates (like contacts saved on Telegram) to local DB
+            # Sync back cloud teammates and cloud tasks
             cloud_teammates = data.get("cloud_teammates", [])
-            if cloud_teammates and os.path.exists(LOCAL_AGENT_DB):
+            cloud_tasks = data.get("cloud_tasks", [])
+            cloud_updates = data.get("cloud_task_updates", [])
+            if os.path.exists(LOCAL_AGENT_DB):
                 try:
                     conn = sqlite3.connect(LOCAL_AGENT_DB)
                     for tm in cloud_teammates:
@@ -90,11 +99,19 @@ def sync():
                             INSERT OR IGNORE INTO teammates (name, phone, email)
                             VALUES (?, ?, ?)
                         """, (tm.get("name", ""), tm.get("phone", ""), tm.get("email", "")))
+                    for t in cloud_tasks:
+                        conn.execute("""
+                            UPDATE tasks SET status = ?, progress = ?, completed_at = ? WHERE id = ?
+                        """, (t.get("status", "pending"), t.get("progress", 0), t.get("completed_at"), t.get("id")))
+                    for u in cloud_updates:
+                        conn.execute("""
+                            INSERT OR IGNORE INTO task_updates (id, task_id, note, progress, created_at)
+                            VALUES (?, ?, ?, ?, ?)
+                        """, (u.get("id"), u.get("task_id"), u.get("note"), u.get("progress"), u.get("created_at")))
                     conn.commit()
                     conn.close()
-                    print(f"[Wispr Sync] Pulled {len(cloud_teammates)} contacts from cloud into local database.")
                 except Exception as e:
-                    print(f"[Wispr Sync] Could not update local teammates: {e}")
+                    print(f"[Wispr Sync] Could not update local database: {e}")
         else:
             print(f"[Wispr Sync] Server returned status {response.status_code}: {response.text}")
     except Exception as e:
