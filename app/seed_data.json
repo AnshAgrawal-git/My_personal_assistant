@@ -1,0 +1,86 @@
+{
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Get feedback from Pralad on delivered CRM",
+      "description": "Review mobile interface lead addition issue and pass feedback to Shanzel",
+      "status": "pending",
+      "priority": "medium",
+      "assigned_to": null,
+      "due_date": "2026-10-30",
+      "source": "manual",
+      "created_at": "2026-10-30 12:12:55",
+      "completed_at": null,
+      "progress": 0
+    },
+    {
+      "id": 2,
+      "title": "List AI projects for Shobana demo",
+      "description": "Find projects on GitHub for demo",
+      "status": "pending",
+      "priority": "high",
+      "assigned_to": null,
+      "due_date": "2026-10-31",
+      "source": "manual",
+      "created_at": "2026-10-30 12:12:55",
+      "completed_at": null,
+      "progress": 0
+    },
+    {
+      "id": 3,
+      "title": "Create/show Relat agent for running ad campaigns and posts",
+      "description": "Agent for running ads and automated posting",
+      "status": "pending",
+      "priority": "medium",
+      "assigned_to": null,
+      "due_date": "2026-10-31",
+      "source": "manual",
+      "created_at": "2026-10-29 21:24:50",
+      "completed_at": null,
+      "progress": 0
+    },
+    {
+      "id": 4,
+      "title": "Brainstorm startup project",
+      "description": "Brainstorm startup ideas and feasibility",
+      "status": "pending",
+      "priority": "medium",
+      "assigned_to": null,
+      "due_date": null,
+      "source": "manual",
+      "created_at": "2026-10-29 21:24:50",
+      "completed_at": null,
+      "progress": 0
+    },
+    {
+      "id": 5,
+      "title": "Plan e-commerce platform/website for Pralad",
+      "description": "E-commerce platform architecture and requirements",
+      "status": "pending",
+      "priority": "medium",
+      "assigned_to": null,
+      "due_date": null,
+      "source": "manual",
+      "created_at": "2026-10-29 21:24:50",
+      "completed_at": null,
+      "progress": 0
+    }
+  ],
+  "task_updates": [
+    {
+      "id": 2,
+      "task_id": 1,
+      "note": "review mobile interface (lead addition issue) and pass feedback to Shanzel",
+      "progress": 0,
+      "created_at": "2026-10-30 12:12:55"
+    },
+    {
+      "id": 3,
+      "task_id": 2,
+      "note": "find projects on GitHub today",
+      "progress": 0,
+      "created_at": "2026-10-30 12:12:55"
+    }
+  ],
+  "teammates": []
+}

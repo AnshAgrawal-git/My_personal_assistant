@@ -82,17 +82,18 @@ async def sync_wispr(request: Request):
     tasks = body.get("tasks", [])
     teammates = body.get("teammates", [])
     task_updates = body.get("task_updates", [])
+    replace_tasks = body.get("replace_tasks", False)
     
     if meetings:
         db.save_synced_meetings(meetings)
     if notes:
         db.save_synced_notes(notes)
     if tasks:
-        db.save_synced_tasks(tasks)
+        db.save_synced_tasks(tasks, replace_all=replace_tasks)
     if teammates:
         db.save_synced_teammates(teammates)
-    if task_updates:
-        db.save_synced_task_updates(task_updates)
+    if task_updates or replace_tasks:
+        db.save_synced_task_updates(task_updates, replace_all=replace_tasks)
         
     cloud_tasks = db.get_all_tasks()
     cloud_teammates = db.get_all_teammates()

@@ -10,11 +10,12 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "9288553367:AAHCsaRkubxdIbygEMPgmG6n
 DB_PATH = os.path.expandvars(r"%APPDATA%\Wispr Flow\flow.sqlite")
 LOCAL_AGENT_DB = os.path.join(os.path.dirname(__file__), "agent.db")
 
-def sync():
+def sync(replace_tasks: bool = False):
     meetings = []
     notes = []
     tasks = []
     teammates = []
+    task_updates = []
 
     # 1. Read Wispr Flow if installed
     if os.path.exists(DB_PATH):
@@ -52,7 +53,6 @@ def sync():
             print(f"[Wispr Sync] Could not read Wispr Flow database: {e}")
 
     # 2. Read Local Tasks & Teammates from agent.db
-    task_updates = []
     if os.path.exists(LOCAL_AGENT_DB):
         try:
             conn = sqlite3.connect(LOCAL_AGENT_DB)
@@ -78,7 +78,8 @@ def sync():
         "notes": notes,
         "tasks": tasks,
         "teammates": teammates,
-        "task_updates": task_updates
+        "task_updates": task_updates,
+        "replace_tasks": replace_tasks
     }
 
     try:

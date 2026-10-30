@@ -31,7 +31,7 @@ def add_task(title: str, due_date: str = None, priority: str = "medium") -> str:
 
 @tool
 def show_tasks(status: str = "pending") -> str:
-    """View tasks filtered by status.
+    """View tasks filtered by status. Shows all tasks, their progress, due dates, and recent notes.
     
     Args:
         status: Task status — 'pending', 'completed', or 'cancelled'.
@@ -40,17 +40,25 @@ def show_tasks(status: str = "pending") -> str:
     if not tasks:
         return f"No {status} tasks found! 🚀"
     
-    lines = [f"📋 Your {status} tasks:"]
+    lines = [f"📋 Your {status} tasks ({len(tasks)}):"]
     for t in tasks:
         emoji = {"urgent": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}.get(t["priority"], "⚪")
         prog = t.get("progress") or 0
         prog_str = f" [{prog}%]" if prog > 0 else ""
         line = f"{emoji} #{t['id']} — {t['title']}{prog_str}"
-        if t["due_date"]:
+        if t.get("due_date"):
             line += f" (due {t['due_date']})"
-        if t["assigned_to"]:
+        if t.get("assigned_to"):
             line += f" → assigned to {t['assigned_to']}"
         lines.append(line)
+        
+        # Display latest note if available
+        details = db.get_task_details(t["id"])
+        if details and details.get("updates"):
+            latest_note = details["updates"][-1].get("note")
+            if latest_note:
+                lines.append(f"   💬 _Note: {latest_note}_")
+                
     return "\n".join(lines)
 
 @tool

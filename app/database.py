@@ -87,6 +87,41 @@ def init_db():
         conn.commit()
     except sqlite3.OperationalError:
         pass
+
+    # Auto-seed default tasks if the database is newly initialized (e.g. after Render fresh container deploy)
+    cursor = conn.execute("SELECT COUNT(*) FROM tasks")
+    if cursor.fetchone()[0] == 0:
+        seed_path = os.path.join(os.path.dirname(__file__), "seed_data.json")
+        if os.path.exists(seed_path):
+            try:
+                with open(seed_path, "r", encoding="utf-8") as f:
+                    seed = json.load(f)
+                for t in seed.get("tasks", []):
+                    conn.execute("""
+                        INSERT OR IGNORE INTO tasks (id, title, description, status, priority, assigned_to, due_date, source, created_at, completed_at, progress)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        t.get("id"), t.get("title"), t.get("description", ""), t.get("status", "pending"),
+                        t.get("priority", "medium"), t.get("assigned_to"), t.get("due_date"),
+                        t.get("source", "manual"), t.get("created_at"), t.get("completed_at"), t.get("progress", 0)
+                    ))
+                for u in seed.get("task_updates", []):
+                    conn.execute("""
+                        INSERT OR IGNORE INTO task_updates (id, task_id, note, progress, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (
+                        u.get("id"), u.get("task_id"), u.get("note"), u.get("progress", 0), u.get("created_at")
+                    ))
+                for tm in seed.get("teammates", []):
+                    conn.execute("""
+                        INSERT OR IGNORE INTO teammates (name, phone, email)
+                        VALUES (?, ?, ?)
+                    """, (tm.get("name"), tm.get("phone", ""), tm.get("email", "")))
+                conn.commit()
+                print(f"[DB] Initialized database with {len(seed.get('tasks', []))} tasks from seed_data.json.")
+            except Exception as e:
+                print(f"[DB] Error seeding data: {e}")
+
     conn.close()
 
 # ─── Task Operations ───
@@ -327,15 +362,20 @@ def get_cloud_wispr_notes(limit: int = 5) -> list[dict]:
     conn.close()
     return [dict(r) for r in rows]
 
-def save_synced_tasks(tasks: list[dict]):
+def save_synced_tasks(tasks: list[dict], replace_all: bool = False):
     conn = get_db()
+    if replace_all:
+        conn.execute("DELETE FROM tasks")
     for t in tasks:
-        existing = conn.execute("SELECT id FROM tasks WHERE LOWER(title) = LOWER(?)", (t.get("title", "").strip(),)).fetchone()
+        existing = None
+        if not replace_all:
+            existing = conn.execute("SELECT id FROM tasks WHERE LOWER(title) = LOWER(?)", (t.get("title", "").strip(),)).fetchone()
         if not existing:
             conn.execute("""
-                INSERT INTO tasks (title, description, status, priority, assigned_to, due_date, source, created_at, completed_at, progress)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO tasks (id, title, description, status, priority, assigned_to, due_date, source, created_at, completed_at, progress)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
+                t.get("id"),
                 t.get("title", "").strip(),
                 t.get("description", ""),
                 t.get("status", "pending"),
@@ -354,11 +394,13 @@ def save_synced_tasks(tasks: list[dict]):
     conn.commit()
     conn.close()
 
-def save_synced_task_updates(updates: list[dict]):
+def save_synced_task_updates(updates: list[dict], replace_all: bool = False):
     conn = get_db()
+    if replace_all:
+        conn.execute("DELETE FROM task_updates")
     for u in updates:
         conn.execute("""
-            INSERT OR IGNORE INTO task_updates (id, task_id, note, progress, created_at)
+            INSERT OR REPLACE INTO task_updates (id, task_id, note, progress, created_at)
             VALUES (?, ?, ?, ?, ?)
         """, (u.get("id"), u.get("task_id"), u.get("note"), u.get("progress"), u.get("created_at")))
     conn.commit()
