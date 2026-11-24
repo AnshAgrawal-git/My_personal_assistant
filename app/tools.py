@@ -5,6 +5,7 @@ from langchain_core.tools import tool
 from app import database as db
 from app import wispr
 from app import google_meet
+from app import routine
 
 # ─── Task Management Tools ───
 
@@ -436,6 +437,51 @@ def create_whatsapp_chat_link(recipient: str, message: str) -> str:
             f"💡 *Tip:* Reply with: *'{recipient}\\'s phone is +91...'* so next time it opens their specific chat directly!"
         )
 
+# ─── Fitness & Daily Routine Tools ───
+
+@tool
+def get_daily_routine() -> str:
+    """View the user's complete daily routine, meal timing, calorie/protein breakdown, and fitness rules."""
+    return routine.get_daily_routine_summary()
+
+@tool
+def get_workout_split(day: str = None) -> str:
+    """View the workout split, target muscle group, exercise list, and coaching tips for today or a specific day.
+    
+    Args:
+        day: Optional day name, e.g. 'Monday', 'Tuesday', 'Friday'. Defaults to current day.
+    """
+    return routine.get_today_workout(day)
+
+@tool
+def log_fitness_entry(log_type: str, value: str, notes: str = "") -> str:
+    """Log a fitness entry such as body weight, workout sets/weights, water intake, or meal compliance.
+    
+    Args:
+        log_type: Type of log: 'weight', 'workout', 'meal', or 'water'.
+        value: The recorded value (e.g. '70.5 kg', 'Bench press 65kg 4x8', 'Completed 3L water').
+        notes: Optional extra observations or details.
+    """
+    log_id = db.log_fitness(log_type=log_type, value=value, notes=notes)
+    return f"✅ Logged {log_type.title()} #{log_id}: '{value}'" + (f" ({notes})" if notes else "")
+
+@tool
+def get_fitness_history(log_type: str = None) -> str:
+    """Retrieve recent fitness logs such as past weight measurements or workout records.
+    
+    Args:
+        log_type: Optional filter: 'weight', 'workout', 'meal', or 'water'. None for all.
+    """
+    logs = db.get_recent_fitness_logs(log_type=log_type, limit=10)
+    if not logs:
+        return "No fitness logs found" + (f" for '{log_type}'." if log_type else ". Start logging anytime!")
+    lines = [f"📊 Recent Fitness Logs" + (f" ({log_type.title()}):" if log_type else ":")]
+    for l in logs:
+        dt = l["logged_at"][:16]
+        note_str = f" — _{l['notes']}_" if l.get("notes") else ""
+        lines.append(f"• `[{dt}]` *{l['log_type'].upper()}:* {l['value']}{note_str}")
+    return "\n".join(lines)
+
 ALL_TOOLS = [
     add_task,
     show_tasks,
@@ -453,4 +499,8 @@ ALL_TOOLS = [
     list_contacts,
     schedule_meeting,
     create_whatsapp_chat_link,
+    get_daily_routine,
+    get_workout_split,
+    log_fitness_entry,
+    get_fitness_history,
 ]

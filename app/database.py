@@ -75,6 +75,14 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS fitness_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            log_type TEXT NOT NULL,
+            value TEXT NOT NULL,
+            notes TEXT DEFAULT '',
+            logged_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
     """)
     conn.commit()
     try:
@@ -431,6 +439,34 @@ def get_all_tasks() -> list[dict]:
 def get_all_teammates() -> list[dict]:
     conn = get_db()
     rows = conn.execute("SELECT * FROM teammates ORDER BY id ASC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+# ─── Fitness & Routine Logs ───
+
+def log_fitness(log_type: str, value: str, notes: str = "") -> int:
+    conn = get_db()
+    cursor = conn.execute(
+        "INSERT INTO fitness_logs (log_type, value, notes) VALUES (?, ?, ?)",
+        (log_type.lower().strip(), str(value).strip(), notes.strip())
+    )
+    conn.commit()
+    log_id = cursor.lastrowid
+    conn.close()
+    return log_id
+
+def get_recent_fitness_logs(log_type: str = None, limit: int = 10) -> list[dict]:
+    conn = get_db()
+    if log_type:
+        rows = conn.execute(
+            "SELECT * FROM fitness_logs WHERE log_type = ? ORDER BY logged_at DESC LIMIT ?",
+            (log_type.lower().strip(), limit)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM fitness_logs ORDER BY logged_at DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 

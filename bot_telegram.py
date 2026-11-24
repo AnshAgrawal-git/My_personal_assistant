@@ -15,6 +15,7 @@ from telegram.ext import (
 from app.agent import process_message
 from app import database as db
 from app import google_meet
+from app import routine
 
 load_dotenv()
 db.init_db()
@@ -139,6 +140,19 @@ async def followup_checker_job(context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logging.error(f"Failed to send follow-up alert: {e}")
 
+async def routine_slot_job(context: ContextTypes.DEFAULT_TYPE):
+    """Sends scheduled daily routine and fitness reminders to TELEGRAM_USER_ID."""
+    if not TELEGRAM_USER_ID:
+        return
+    slot_id = context.job.data
+    text = routine.build_slot_message(slot_id)
+    if text:
+        try:
+            await context.bot.send_message(chat_id=TELEGRAM_USER_ID, text=text, parse_mode="Markdown")
+            logging.info(f"Daily routine alert [{slot_id}] sent to user.")
+        except Exception as e:
+            logging.error(f"Failed to send routine alert [{slot_id}]: {e}")
+
 # ─── Commands ───
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -149,6 +163,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Schedule calls: *Schedule a Google Meet with Rahul tomorrow at 3 PM*\n"
         "• Save contacts: *Save Rahul's email as rahul@example.com*\n"
         "• Track tasks: *Remind me to review contracts by Friday*\n"
+        "• Daily Routine & Fitness: Try */routine*, */workout*, or */weighin*\n"
         "• Briefings: Try */morning* or */evening* anytime!"
     )
     await update.message.reply_text(welcome_text, parse_mode="Markdown")
@@ -160,6 +175,27 @@ async def morning_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def evening_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = build_evening_wrapup_text()
     await update.message.reply_text(text, parse_mode="Markdown")
+
+async def routine_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = routine.get_daily_routine_summary()
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def workout_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args
+    day = args[0].capitalize() if args else None
+    text = routine.get_today_workout(day)
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def weighin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("⚖️ Usage: `/weighin 70.5` (enter your weight in kg)", parse_mode="Markdown")
+        return
+    val = context.args[0]
+    log_id = db.log_fitness(log_type="weight", value=f"{val} kg")
+    await update.message.reply_text(
+        f"⚖️ *Weight Logged!* {val} kg (Log #{log_id})\nKeep pushing towards your weekly target of +0.5 to 0.75 kg! 💪",
+        parse_mode="Markdown"
+    )
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
@@ -225,16 +261,38 @@ def create_telegram_application():
     app.add_handler(CommandHandler("evening", evening_command))
     app.add_handler(CommandHandler("wrapup", evening_command))
     app.add_handler(CommandHandler("night", evening_command))
+    app.add_handler(CommandHandler("routine", routine_command))
+    app.add_handler(CommandHandler("diet", routine_command))
+    app.add_handler(CommandHandler("workout", workout_command))
+    app.add_handler(CommandHandler("weighin", weighin_command))
     app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text))
     
     # Scheduled Jobs
     job_queue = app.job_queue
     if job_queue:
-        # 8:30 AM IST Daily Morning Briefing
+        # 8:30 AM IST Daily Morning Briefing (Schedule & Priority Tasks)
         job_queue.run_daily(morning_briefing_job, time=datetime.time(8, 30, tzinfo=TZ))
-        # 9:00 PM IST Daily Night Wrap-up
-        job_queue.run_daily(evening_wrapup_job, time=datetime.time(21, 0, tzinfo=TZ))
+        
+        # ─── Daily Routine & Fitness Schedule (IST) ───
+        routine_schedule = [
+            (datetime.time(9, 0, tzinfo=TZ), "wake_up"),       # 9:00 AM: Wake up & 500ml water (Monday weigh-in)
+            (datetime.time(9, 30, tzinfo=TZ), "breakfast"),     # 9:30 AM: Breakfast (~700 kcal)
+            (datetime.time(12, 0, tzinfo=TZ), "shake"),         # 12:00 PM: Shake (~900 kcal)
+            (datetime.time(14, 0, tzinfo=TZ), "lunch"),         # 2:00 PM: Lunch (~700 kcal)
+            (datetime.time(17, 0, tzinfo=TZ), "pre_workout"),   # 5:00 PM: Pre-workout snack (~300 kcal)
+            (datetime.time(18, 0, tzinfo=TZ), "gym"),           # 6:00 PM: Gym session / Workout split
+            (datetime.time(19, 30, tzinfo=TZ), "post_workout"), # 7:30 PM: Post-workout snack (~250 kcal)
+            (datetime.time(21, 0, tzinfo=TZ), "dinner"),        # 9:00 PM: Dinner (~700 kcal)
+            (datetime.time(23, 30, tzinfo=TZ), "before_bed"),   # 11:30 PM: Before bed snack (~200 kcal)
+            (datetime.time(0, 30, tzinfo=TZ), "sleep"),         # 12:30 AM: Sleep / Lights out (8.5 hrs)
+        ]
+        for t_val, slot_id in routine_schedule:
+            job_queue.run_daily(routine_slot_job, time=t_val, data=slot_id, name=f"routine_{slot_id}")
+            
+        # 9:05 PM IST Daily Night Task Wrap-up
+        job_queue.run_daily(evening_wrapup_job, time=datetime.time(21, 5, tzinfo=TZ))
+        
         # Every 10 minutes: check teammate followups
         job_queue.run_repeating(followup_checker_job, interval=600, first=15)
         
